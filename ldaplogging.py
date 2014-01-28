@@ -1,4 +1,5 @@
 import sys
+import options
 
 [LOG_ERR, LOG_WARN, LOG_INFO, LOG_DEBUG] = range(4)
 
@@ -9,7 +10,7 @@ fmts = {
     LOG_ERR: chr(27) + "[31mError: %s" + chr(27) + "[0m\n",
     LOG_WARN: chr(27) + "[33mWarning: %s" + chr(27) + "[0m\n",
     LOG_INFO: "%s\n",
-    LOG_DEBUG: "" #"%s\n",
+	LOG_DEBUG: "[DEBUG]: %s\n" #"%s\n",
 }
 
 
@@ -23,5 +24,10 @@ def lwarn(msg):
     log(LOG_WARN, msg)
 def linfo(msg):
     log(LOG_INFO, msg)
-def ldebug(msg):
-    log(LOG_DEBUG, msg)
+
+if options.DEBUG:
+		def ldebug(msg):
+				log(LOG_DEBUG, msg)
+else:
+		def ldebug(msg):
+				return

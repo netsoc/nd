@@ -4,6 +4,7 @@
 
 import pwd as mod_pwd, os, getpass
 import ldap, ldapurl, ldap.sasl
+import options
 from ldaplogging import *
 
 
@@ -38,11 +39,13 @@ def ldap_connect(dn = None, pwd = None, host = None):
 	    l = ldap.initialize("ldapi:///")
 	    l.sasl_interactive_bind_s("", ldap.sasl.external())
 	except:
-	    # then try the host called "ldapmaster"
-	    l = ldap.initialize("ldap://ldapmaster")
-	    uid = mod_pwd.getpwuid(os.getuid())[0]
-	    passwd = getpass.getpass()
-	    l.simple_bind_s(uidfmt % uid, passwd)
+            l = ldap.initialize(options.HOST)
+            if options.UseTLS:
+                l.set_option(ldap.OPT_X_TLS_CACERTFILE, options.TLS_CACERTFILE)
+                l.start_tls_s()
+    	    uid = mod_pwd.getpwuid(os.getuid())[0]
+    	    passwd = getpass.getpass()
+    	    l.simple_bind_s(uidfmt % uid, passwd)
     else:
 	if host is None: host = "127.0.0.1"
 	l = ldap.initialize(str(ldapurl.LDAPUrl(host)))

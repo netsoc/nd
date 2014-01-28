@@ -177,6 +177,7 @@ class LDAPClass(type):
         for i in cls.all_objs(): yield i
 
     def __repr__(cls):
+        #
         return "<class '%s.%s' (%d objects)>" % (cls.__module__, cls.__name__, len(cls))
 
 
