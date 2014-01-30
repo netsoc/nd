@@ -9,6 +9,11 @@ dn: cn=root,dc=netsoc,dc=tcd,dc=ie
 objectClass: organizationalRole
 cn: root
 
+dn: ou=Setting,dc=netsoc,dc=tcd,dc=ie
+objectClass: organizationalUnit
+ou: Setting
+description: ND settings stored in LDAP
+
 dn: ou=User,dc=netsoc,dc=tcd,dc=ie
 objectClass: organizationalUnit
 ou: User
