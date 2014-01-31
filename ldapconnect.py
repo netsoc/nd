@@ -11,6 +11,7 @@ import ldap.sasl
 import options
 from ldaplogging import ldebug
 
+
 uidfmt = "uid=%s,ou=User,dc=netsoc,dc=tcd,dc=ie"
 
 _ldap_conn = None
@@ -37,29 +38,29 @@ def ldap_connect(dn=None, pwd=None, host=None):
     #    return l
     global _ldap_conn
     if dn is None:
-    # if no DN is specified, we try ldapi first
+        # if no DN is specified, we try ldapi first
         try:
             l = ldap.initialize("ldapi:///")
             l.sasl_interactive_bind_s("", ldap.sasl.external())
         except:
-                l = ldap.initialize(options.HOST)
-                if options.UseTLS:
-                    l.set_option(ldap.OPT_X_TLS_CACERTFILE,
-                                 options.TLS_CACERTFILE)
-                    l.start_tls_s()
-                uid = mod_pwd.getpwuid(os.getuid())[0]
-                passwd = getpass.getpass()
-                l.simple_bind_s(uidfmt % uid, passwd)
+            l = ldap.initialize(options.HOST)
+            if options.UseTLS:
+                l.set_option(ldap.OPT_X_TLS_CACERTFILE, options.TLS_CACERTFILE)
+                l.start_tls_s()
+            uid = mod_pwd.getpwuid(os.getuid())[0]
+            passwd = getpass.getpass()
+            l.simple_bind_s(uidfmt % uid, passwd)
     else:
         if host is None:
             host = "127.0.0.1"
-        l = ldap.initialize(str(ldapurl.LDAPUrl(host)))
-        l.simple_bind_s(dn, pwd)
-        _ldap_conn = l
-        return l
+            l = ldap.initialize(str(ldapurl.LDAPUrl(host)))
+            l.simple_bind(dn, pwd)
+    _ldap_conn = l
+    return l
 
 
 def with_ldap_connection(f):
+
     def func(*args, **kwargs):
         global _ldap_conn
         if _ldap_conn is None:
