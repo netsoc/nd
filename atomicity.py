@@ -44,7 +44,7 @@ def atomic_modrdn(func):
     def wrap(*args, **kwargs):
         self = args[0]
 
-        old_vals = (self, ldapobject.dn_to_tuple(self.get_dn()[0][1]))
+        old_vals = (self, ldapobject.dn_to_tuple(self.get_dn())[0][1])
         _op_queue.put((func, args, kwargs, old_vals, undo_modrdn))
     return wrap
 
@@ -55,16 +55,7 @@ def atomic_add(func):
         ldapconnect.delete(dn)
 
     def wrap(*args, **kwargs):
-        cn = ""
-        for x in args[1]:
-            if x[0] == "cn":
-                cn = x[1]
-        dn = ldapconnect.search(
-            "dc=netsoc,dc=tcd,dc=ie",
-            ldap.SCOPE_SUBTREE, "(cn=%s)" % cn, ['dn']
-        )[0][0]
-
-        old_vals = (dn)
+        old_vals = (args[1])
 
         _op_queue.put((func, args, kwargs, old_vals, undo_add))
     return wrap
@@ -76,13 +67,12 @@ def atomic_delete(func):
         ldapconnect.add(dn, modlist)
 
     def wrap(*args, **kwargs):
-        dn = args[0]
+        dn = args[1]
         # Get the object's attributes and demongify it what ldap.add_s wants
         attrs = ldapconnect.search(dn, ldap.SCOPE_BASE, None)[0][1]
         attrlist = [(x, attrs[x][0] if len(attrs[x]) == 1 else attrs[x])
                     for x in attrs]
         old_vals = (dn, attrlist)
-
         _op_queue.put((func, args, kwargs, old_vals, undo_delete))
 
     return wrap
@@ -127,10 +117,11 @@ def atomic(func):
             ldebug("<exception raised in atomic operation... reversing>")
             undo_list = _op_stack.reverse()
             # For each task done
-            for x in undo_list:
-                ldebug("<executing %s in undo stack>" % x[4])
-                # Call the inverse function with the old values
-                x[4](*x[3])
+            if undo_list is not None:
+                for x in undo_list:
+                    ldebug("<executing %s in undo stack>" % x[4])
+                    # Call the inverse function with the old values
+                    x[4](*x[3])
         # Reset the task queue and stack
         _op_stack = []
         _op_queue = Queue.Queue()
