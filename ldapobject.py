@@ -10,7 +10,7 @@ from ldaplogging import ldebug
 from ldaplogging import lerr
 from ldaplogging import linfo
 import ldapconnect as lc
-
+import atomicity
 
 # The mapping model is as follows:
 # Nodes in the LDAP tree with children are mapped to classes
@@ -33,6 +33,8 @@ import ldapconnect as lc
 # and value, for example:
 # (('uid','mu'),('ou','User'),('dc','netsoc'),('dc','tcd'),('dc','ie'))
 # These two functions convert between tuple syntax and string syntax
+
+
 def dn_to_tuple(dn):
     dnparts = [x.partition("=") for x in ldap.dn.explode_dn(dn)]
     return tuple((x[0], x[2]) for x in dnparts)
@@ -259,9 +261,11 @@ class LDAPObject(object):
                 res[a] = []
         return res
 
+    @atomicity.atomic_modattrs
     def _raw_modattrs(self, modlist):
         return lc.modify(self.get_dn(), modlist)
 
+    @atomicity.atomic_modrdn
     def _raw_modrdn(self, newrdn):
         rdn_part = ((self.rdn_attr, newrdn),)
         r = lc.modrdn(self.get_dn(), tuple_to_dn(rdn_part))
@@ -281,7 +285,6 @@ class LDAPObject(object):
         else:
             n = attr.get_ldap_name()
             vals = self._raw_readattrs([n])[n]
-            print("VALS, N: %s, %s" % (vals, n))
             if len(vals) == 0:
                 return None
             elif len(vals) > 1:
@@ -308,6 +311,7 @@ class LDAPObject(object):
         d = self._raw_readattrs(["*"] + Attribute.list_backlink_attrs())
         return [x for x in d.keys() if len(d[x]) > 0]
 
+    @atomicity.atomic
     def set_attribute(self, name, val):
         '''Update an attribute. Converts the value from Python form to
            LDAP form. See ValueSet for how to do this
@@ -324,6 +328,7 @@ class LDAPObject(object):
                 self._raw_modattrs([(ldap.MOD_REPLACE, n,
                                      attr.py_to_ldap(val))])
 
+    @atomicity.atomic
     def del_attribute(self, name):
         '''Delete all values for a given attribute from this object'''
         attr = Attribute.get_attribute(name)
@@ -380,6 +385,7 @@ class LDAPObject(object):
         else:
             self.del_attribute(name)
 
+    @atomicity.atomic
     def destroy(self):
         '''Delete this object from LDAP'''
         linfo("Destroying %s of type %s" % (self.get_dn(), type(self)))
@@ -397,6 +403,7 @@ class LDAPObject(object):
     # This asymmetry makes sense:
     # User.create('someuser') yet someuser.destroy()
     @classmethod
+    @atomicity.atomic
     def create(cls, **attrs):
         '''Create an object of this class'''
         if cls.rdn_attr not in attrs:

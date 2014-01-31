@@ -10,7 +10,7 @@ import ldapurl
 import ldap.sasl
 import options
 from ldaplogging import ldebug
-
+import atomicity
 
 uidfmt = "uid=%s,ou=User,dc=netsoc,dc=tcd,dc=ie"
 
@@ -84,12 +84,14 @@ def search(l, base, scope, filter, attrlist=None):
 
 
 @with_ldap_connection
+@atomicity.atomic_add
 def add(l, dn, modlist):
     ldebug("Adding %s" % modlist)
     l.add_s(dn, modlist)
 
 
 @with_ldap_connection
+@atomicity.atomic_delete
 def delete(l, dn):
     l.delete_s(dn)
 

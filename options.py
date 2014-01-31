@@ -1,4 +1,4 @@
-DEBUG = False
+DEBUG = True
 HOST = "ldap://snark-ldap.netsoc.tcd.ie"
 UseTLS = True
 TLS_CACERTFILE = "/etc/ldap/certs/ldapCA.pem"
