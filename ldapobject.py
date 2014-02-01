@@ -328,7 +328,6 @@ class LDAPObject(object):
                 self._raw_modattrs([(ldap.MOD_REPLACE, n,
                                      attr.py_to_ldap(val))])
 
-    @atomicity.atomic
     def del_attribute(self, name):
         '''Delete all values for a given attribute from this object'''
         attr = Attribute.get_attribute(name)
@@ -385,7 +384,6 @@ class LDAPObject(object):
         else:
             self.del_attribute(name)
 
-    @atomicity.atomic
     def destroy(self):
         '''Delete this object from LDAP'''
         linfo("Destroying %s of type %s" % (self.get_dn(), type(self)))
@@ -403,7 +401,6 @@ class LDAPObject(object):
     # This asymmetry makes sense:
     # User.create('someuser') yet someuser.destroy()
     @classmethod
-    @atomicity.atomic
     def create(cls, **attrs):
         '''Create an object of this class'''
         if cls.rdn_attr not in attrs:
@@ -700,10 +697,12 @@ class ValueSet(object):
                             ldname,
                             attr.py_to_ldap(val))])
 
+    @atomicity.atomic
     def __iadd__(self, val):
         self.add(val)
         return self
 
+    @atomicity.atomic
     def __isub__(self, val):
         self.remove(val)
         return self

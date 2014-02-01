@@ -11,6 +11,7 @@ import sendmail as sm
 import ldap
 from ldapobject import LDAPObject, SearchFilter, Attribute, match_like
 from ldaplogging import lwarn
+import atomicity
 try:
     import accountrequests
     can_request_accounts = True
@@ -139,6 +140,7 @@ class User(NDObject):
         if name in User.bad_usernames():
             User.bad_usernames().remove(name)
 
+    @atomicity.atomic
     def destroy(self):
         # also destroy group
         g = self.get_personal_group()
@@ -162,7 +164,7 @@ class User(NDObject):
 
     def mark_member(self):
         if not self.is_current_member():
-            self.tcdnetsoc_membership_year += current_session()
+            self.tcdnetsoc_membership_year.add(current_session())
 
     def sendmail(self, msg, **kw):
         ''' Email the given message to this User '''
@@ -193,7 +195,7 @@ class User(NDObject):
             self.sendmail("account_renewed", to=self.mail, username=self.uid)
 
     def comment(self, msg):
-        self.tcdnetsoc_admin_comment += '%s: %s' % (time.asctime(), msg)
+        self.tcdnetsoc_admin_comment.add('%s: %s' % (time.asctime(), msg))
 
     def merge_into(self, other):
         assert self.get_state() == 'newmember'
@@ -218,8 +220,8 @@ class User(NDObject):
             other.comment("Renewed by account with non-matching mail %s"
                           % self.mail)
 
-        self.tcdnetsoc_membership_year -= current_session()
-        other.tcdnetsoc_membership_year += current_session()
+        self.tcdnetsoc_membership_year.re.remove(current_session())
+        other.tcdnetsoc_membership_year.add(current_session())
         self.destroy()
 
     def passwd(self, new, old=None):
@@ -262,10 +264,10 @@ class User(NDObject):
         return self in Privilege(name)
 
     def grant_priv(self, name):
-        self.memberOf += Privilege(name)
+        self.memberOf.add(Privilege(name))
 
     def revoke_priv(self, name):
-        self.memberOf -= Privilege(name)
+        self.memberOf.remove(Privilege(name))
 
     def on_council(self):
         return self in Group('council')
@@ -385,8 +387,8 @@ class User(NDObject):
             if st == "newmember":
                 del self.tcdnetsoc_saved_password
             else:
-                Privilege(st).member -= self
-            Privilege(newst).member += self
+                Privilege(st).member.removee(self)
+            Privilege(newst).member.add(self)
             if newst == "shell":
                 # ensure GID is set
                 if self.get_attribute('gidNumber') is None:
@@ -399,13 +401,13 @@ class User(NDObject):
                 # ensure group exists
                 self.create_personal_group()
 
-                self.objectClass += 'posixAccount'
+                self.objectClass.add('posixAccount')
 
                 # (re-)enable Samba
                 if st == 'newmember':
                     self.setup_samba_account()
                 else:
-                    self.objectClass += 'sambaSamAccount'
+                    self.objectClass.add('sambaSamAccount')
 
                 # restore old password (if any)
                 if newpasswd is not None:
@@ -450,11 +452,11 @@ class User(NDObject):
                 if newst in ["bold", "dead"]:
                     for g in list(self.memberOf):
                         if isinstance(g, Privilege) and g.cn != newst:
-                            self.memberOf -= g
+                            self.memberOf.remove(g)
 
                 # remove samba access
                 if 'sambaSamAccount' in self.objectClass:
-                    self.objectClass -= 'sambaSamAccount'
+                    self.objectClass.remove('sambaSamAccount')
 
     def get_correct_state(self):
         # Does this person automatically get a shell?
@@ -525,6 +527,7 @@ class User(NDObject):
                 self.sambaPrimaryGroupSID
 
     @classmethod
+    @atomicity.atomic
     def create(cls, **attrs):
         '''Create a new user. Users are always created in the
            "active" state, i.e. they have a shell, webspace, etc.
@@ -575,6 +578,7 @@ class User(NDObject):
 
         return u
 
+    @atomicity.atomic
     def create_personal_group(self):
         '''Create the personal group for this user, a group containing
         only them. Used as the default group for their files.
@@ -582,15 +586,15 @@ class User(NDObject):
         (You should never need to call this directly)'''
 
         if self.get_attribute('gidNumber') is None:
-            self.gidNumber = self.uidNumber
+            self.set_attribute('gidNumber', self.uidNumber)
         if self.get_personal_group().exists():
             return  # no need to create it
         g = PersonalGroup.create(cn=self.uid,
                                  member=[self],
                                  gidNumber=self.gidNumber)
-        g.sambaSID = g.gen_samba_sid()
+        g.set_attribute('sambaSID', g.gen_samba_sid())
         g.sambaGroupType = 2
-        g.objectClass += 'sambaGroupMapping'
+        g.objectClass.add('sambaGroupMapping')
 
     def setup_samba_account(self):
         '''Set up a Samba account for this user (samba cannot use standard
@@ -603,19 +607,20 @@ class User(NDObject):
         (You should never need to call this directly)'''
         assert 'posixAccount' in self.objectClass
         if self.get_attribute('sambaSID') is None:
-            self.sambaSID = self.gen_samba_sid()
+            self.set_attribute('sambaSID', self.gen_samba_sid())
         if self.get_attribute('sambaPrimaryGroupSID') is None:
-            self.sambaPrimaryGroupSID =\
-                self.get_personal_group().gen_samba_sid()
+            self.set_attribute('sambaPrimaryGroupSID',
+                               self.get_personal_group().gen_samba_sid())
         if 'sambaSamAccount' not in self.objectClass:
-            self.objectClass += 'sambaSamAccount'
+            self.objectClass.add('sambaSamAccount')
 
     def addshell(self, **attrs):
+        mkgrp = False
         if self.get_attribute('gidNumber') is None:
             mkgrp = True
-            self.gidNumber = self.uidNumber
+            self.set_attribute('gidNumber', self.uidNumber)
         if self.get_attribute('homeDirectory') is None:
-            self.homeDirectory = '/home/' + self.uid
+            self.set_attribute('homeDirectory', '/home/' + self.uid)
 
         if mkgrp:
             self.create_personal_group()
@@ -623,7 +628,7 @@ class User(NDObject):
         if 'loginShell' not in attrs or "special_shell" in attrs['loginShell']:
             attrs['loginShell'] = User.first_login_shell
 
-        self.objectClass += 'posixAccount'
+        self.objectClass.add('posixAccount')
 
         self.setup_samba_account()
 
@@ -701,9 +706,9 @@ class User(NDObject):
         def _set_quota(self, l):
             for i in self.user.tcdnetsoc_diskquota:
                 if i.startswith(self.fs + ":"):
-                    self.user.tcdnetsoc_diskquota -= i
-            self.user.tcdnetsoc_diskquota +=\
-                ":".join([self.fs] + [str(x) for x in l])
+                    self.user.tcdnetsoc_diskquota.remove(i)
+            self.user.tcdnetsoc_diskquota.add(
+                ":".join([self.fs] + [str(x) for x in l]))
 
         def _get_usage(self):
             for i in self.user.tcdnetsoc_diskusage:
@@ -765,6 +770,7 @@ class Group(NDObject):
             assert self.sambaSID == self.gen_samba_sid()
 
     @classmethod
+    @atomicity.atomic
     def create(cls, **attrs):
         if 'gidNumber' not in attrs:
             attrs['gidNumber'] = GIDAllocator.alloc()
@@ -814,6 +820,7 @@ class Service(NDObject):
                              member=user)))) != 0
 
     @classmethod
+    @atomicity.atomic
     def create(cls, **attrs):
         if 'userPassword' not in attrs:
             attrs['userPassword'] = generate_password()

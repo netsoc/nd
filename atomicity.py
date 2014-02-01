@@ -5,77 +5,80 @@ import ldapobject
 import ldap
 _op_queue = None
 _op_stack = None
-
-
-class Operation(object):
-
-    global _op_queue
-    global _op_stack
-
-    def __init__(self, do_func, undo_func, func_args, *args, **kwargs):
-        return
+running = False
 
 
 def atomic_modattrs(func):
+    if _op_queue is not None:
 
-    def undo_mod_attr(self, modlist):
-        self._raw_modattrs(modlist)
+        def undo_mod_attr(self, modlist):
+            self._raw_modattrs(modlist)
 
-    def wrap(*args, **kwargs):
+        def wrap(*args, **kwargs):
 
-        self = args[0]
-        # (Modify mode, attribute to modify, new value)
-        old_vals = (self,
-                    (args[1][0][0], [args[1][0][1]],
-                     [self._raw_readattrs([args[1][0][1]])])
-                    )
+            self = args[0]
+            # (Modify mode, attribute to modify, new value)
+            old_vals = (self,
+                        (args[1][0][0], [args[1][0][1]],
+                         [self._raw_readattrs([args[1][0][1]])])
+                        )
 
-        _op_queue.put((func, args, kwargs, old_vals, undo_mod_attr))
-        return
+            _op_queue.put((1, (func, args, kwargs, old_vals, undo_mod_attr)))
+            return
 
-    return wrap
+        return wrap
+    else:
+        return func
 
 
 def atomic_modrdn(func):
+    if _op_queue is not None:
+        def undo_modrdn(self, newrdn):
+            self._raw_modrdn(newrdn)
 
-    def undo_modrdn(self, newrdn):
-        self._raw_modrdn(newrdn)
+        def wrap(*args, **kwargs):
+            self = args[0]
 
-    def wrap(*args, **kwargs):
-        self = args[0]
-
-        old_vals = (self, ldapobject.dn_to_tuple(self.get_dn())[0][1])
-        _op_queue.put((func, args, kwargs, old_vals, undo_modrdn))
-    return wrap
+            old_vals = (self, ldapobject.dn_to_tuple(self.get_dn())[0][1])
+            _op_queue.put((1, (func, args, kwargs, old_vals, undo_modrdn)))
+        return wrap
+    else:
+        return func
 
 
 def atomic_add(func):
+    if _op_queue is not None:
 
-    def undo_add(dn):
-        ldapconnect.delete(dn)
+        def undo_add(dn):
+            ldapconnect.delete(dn)
 
-    def wrap(*args, **kwargs):
-        old_vals = (args[1])
+        def wrap(*args, **kwargs):
+            old_vals = (args[1])
 
-        _op_queue.put((func, args, kwargs, old_vals, undo_add))
-    return wrap
+            _op_queue.put((0, (func, args, kwargs, old_vals, undo_add)))
+        return wrap
+    else:
+        return func
 
 
 def atomic_delete(func):
+    if _op_queue is not None:
+        def undo_delete(dn, modlist):
+            ldapconnect.add(dn, modlist)
 
-    def undo_delete(dn, modlist):
-        ldapconnect.add(dn, modlist)
+        def wrap(*args, **kwargs):
+            dn = args[1]
+            # Get the object's attributes
+            # and demongify it what ldap.add_s wants
+            attrs = ldapconnect.search(dn, ldap.SCOPE_BASE, None)[0][1]
+            attrlist = [(x, attrs[x][0] if len(attrs[x]) == 1 else attrs[x])
+                        for x in attrs]
+            old_vals = (dn, attrlist)
+            _op_queue.put((0, (func, args, kwargs, old_vals, undo_delete)))
 
-    def wrap(*args, **kwargs):
-        dn = args[1]
-        # Get the object's attributes and demongify it what ldap.add_s wants
-        attrs = ldapconnect.search(dn, ldap.SCOPE_BASE, None)[0][1]
-        attrlist = [(x, attrs[x][0] if len(attrs[x]) == 1 else attrs[x])
-                    for x in attrs]
-        old_vals = (dn, attrlist)
-        _op_queue.put((func, args, kwargs, old_vals, undo_delete))
-
-    return wrap
+        return wrap
+    else:
+        return func
 
 
 def atomic(func):
@@ -83,49 +86,72 @@ def atomic(func):
     global _op_stack
     # initialize the data structures
     if _op_queue is None:
-        _op_queue = Queue.Queue()
+        _op_queue = Queue.PriorityQueue()
     if _op_stack is None:
         _op_stack = []
 
     def wrap(*args, **kwargs):
         global _op_stack
         global _op_queue
-
-        func(*args, **kwargs)
+        global running
+        restore = False
+        if not running:
+            running = True
+        else:
+            restore = True
+            old_queue = []
+            try:
+                while 1:
+                    old_queue.append(_op_queue.get_nowait())
+            except:
+                pass
+        ret = func(*args, **kwargs)
         err = False
         # Using exceptions here is crude
         # but the alternative is using queue locking
-        try:
-            # While we haven't run out of intercepted fucntion calls
-            while 1:
-                func_tuple = _op_queue.get_nowait()
-                ldebug("<executing queued job %s with args: %s,%s>" %
-                       (func_tuple[0], func_tuple[1], func_tuple[2]))
-                try:
-                    # Call the functions one after another in succession
-                    func_tuple[0](*func_tuple[1], **func_tuple[2])
-                except Exception, e:
-                    err = True
-                    break
+        if _op_queue.qsize() > 0:
 
-                _op_stack.append(func_tuple)
+            try:
+                # While we haven't run out of intercepted fucntion calls
+                while 1:
+                    func_tuple = _op_queue.get_nowait()[1]
+                    ldebug("<executing queued job %s with args: %s,%s>" %
+                           (func_tuple[0], func_tuple[1], func_tuple[2]))
+                    try:
+                        # Call the functions one after another in succession
+                        func_tuple[0](*func_tuple[1], **func_tuple[2])
+                    except Exception, e:
+                        err = True
+                        break
 
-        except Queue.Empty:
-            return
+                    _op_stack.append(func_tuple)
 
-        if err:
-            ldebug("<exception raised in atomic operation... reversing>")
-            undo_list = _op_stack.reverse()
-            # For each task done
-            if undo_list is not None:
-                for x in undo_list:
-                    ldebug("<executing %s in undo stack>" % x[4])
-                    # Call the inverse function with the old values
-                    x[4](*x[3])
-        # Reset the task queue and stack
-        _op_stack = []
-        _op_queue = Queue.Queue()
-        # Now that the operations are reversed, re-raise the exception
-        raise e
+            except Queue.Empty:
+                pass
 
+            if err:
+                ldebug("<exception raised in atomic operation... reversing>")
+                undo_list = _op_stack.reverse()
+                # For each task done
+                if undo_list is not None:
+                    for x in undo_list:
+                        ldebug("<executing %s in undo stack>" % x[4])
+                        # Call the inverse function with the old values
+                        x[4](*x[3])
+
+                # Now that the operations are reversed, re-raise the exception
+                raise e
+            # Reset the task queue and stack
+            _op_queue = Queue.PriorityQueue()
+            _op_stack = []
+            if restore:
+                for x in old_queue:
+                    _op_queue.put_nowait(x)
+            # Unlock queue
+        if not restore:
+            running = False
+        return ret
+
+    wrap.__name__ = func.__name__
+    wrap.__doc__ = func.__doc__
     return wrap
