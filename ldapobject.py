@@ -281,7 +281,6 @@ class LDAPObject(object):
         else:
             n = attr.get_ldap_name()
             vals = self._raw_readattrs([n])[n]
-            print("VALS, N: %s, %s" % (vals, n))
             if len(vals) == 0:
                 return None
             elif len(vals) > 1:
