@@ -323,7 +323,7 @@ class User(NDObject):
     # In theory, there is also a state "archived",
     # when the posixAccount objectclass is removed from the
     # user and their home directories are archived
-    states = ['shell', 'renew', 'bold',
+    states = ['shell', 'renew', 'bold', 'bouncer',
               'expired', 'dead', 'archived', 'newmember']
 
     def get_state(self):
@@ -381,12 +381,27 @@ class User(NDObject):
 #            self.homeDirectory = User.homedir_pattern % self.uid
 #            self.objectClass += "posixAccount"
 #            Privilege("shell").member += self
-        else:
+        # Bouncer state is for alumni who have chosen not to have a shell account
+        elif newst == "bouncer":
+            if st != "shell":
+                raise Exception("user must have had shell account as \
+                                to have bouncer as implemented here")
+            else: # User had shell, now grant user bouncer priv and 
+                  # lock user's shell. Use SSH and pam_access to lock
+                  # user's access to commands
+                self.grant_priv("bouncer")
+                
+                self.tcdnetsoc-temp-loginShell = self.loginShell
+                self.loginShell = '/usr/bin/passwd'
+
+        else: # Effectively default outcome
             if st == "newmember":
                 del self.tcdnetsoc_saved_password
             else:
                 Privilege(st).member -= self
+
             Privilege(newst).member += self
+
             if newst == "shell":
                 # ensure GID is set
                 if self.get_attribute('gidNumber') is None:
@@ -406,6 +421,9 @@ class User(NDObject):
                     self.setup_samba_account()
                 else:
                     self.objectClass += 'sambaSamAccount'
+
+                if st == 'newmember':
+                    self.setup_shadow_account()
 
                 # restore old password (if any)
                 if newpasswd is not None:
@@ -514,6 +532,7 @@ class User(NDObject):
             if st == "shell":
                 assert self.can_bind()
                 assert 'sambaSamAccount' in self.objectClass
+                assert 'shadowAccount' in self.objectClass
             assert len(currentstategroups) == 1 and\
                 currentstategroups[0].cn == st
 
@@ -591,6 +610,30 @@ class User(NDObject):
         g.sambaSID = g.gen_samba_sid()
         g.sambaGroupType = 2
         g.objectClass += 'sambaGroupMapping'
+
+    def setup_shadow_account(self):
+        import time
+        '''Set up the shadowAccount objectClass. This contains the various 
+        entries of /etc/shadow (except for userPassword as that is done
+        elsewhere).
+
+        This should not need to be called directly.'''
+
+        assert 'posixAccount' in self.objectClass
+        if self.get_attribute('shadowLastChange') is None:
+            daysSinceEpoch = Int(time.time() /60 /60 /24)
+            self.shadowLastChange = daysSinceEpoch
+        if self.get_attribute('shadowMin') is None:
+            self.shadowMin = 0
+        if self.get_attribute('shadowMax') is None:
+            self.shadowMax = 1825 # 5 years, stupidly unreasonable
+        if self.get_attribute('shadowWarning') is None:
+            self.shadowWarning = 7
+        if self.get_attribute('shadowFlag') is None:
+            self.shadowFlag = 0
+
+        if 'shadowAccount' not in self.objectClass:
+            self.objectClass += 'shadowAccount'
 
     def setup_samba_account(self):
         '''Set up a Samba account for this user (samba cannot use standard
