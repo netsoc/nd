@@ -5,9 +5,8 @@ Subject: Netsoc account "%(username)s" has been renewed
 Your Netsoc account, %(username)s, has been renewed for this year. 
 
 You can log into our servers Spoon and Cube by SSH or via the Netsoc
-website. Cube also supports graphical login via NX (download a client
-at http://nomachine.com), but is currently only accessible from inside
-college.
+website. Cube also supports graphical login via X2go (download a client
+at http://wiki.x2go.org/doku.php/download:start).
 
 You can use your webspace on Cube by logging in via SSH (download PuTTY
 from http://netsoc.tcd.ie and log into cube.netsoc.tcd.ie) and running

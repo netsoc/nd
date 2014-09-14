@@ -32,12 +32,15 @@ attributetype ( na:3
  DESC 'Year of membership'
  EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX directoryString )
 
+# Generic comment field
 attributetype ( na:4
  NAME 'tcdnetsoc-admin-comment'
  DESC 'Comment'
  EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX directoryString )
 
-
+# Services are things like 'login-spoon', which is a cn under the ou=Service branch
+# Users are granted privileges to use these services
+# The trivial pribileges are the login privileges to the login machines, but others exist (such as ones to the web server, or memberinfo)
 attributetype ( na:5
  NAME 'tcdnetsoc-service-granted'
  DESC 'Service that a privilege grants access to'
@@ -47,6 +50,10 @@ attributetype ( na:6
  NAME 'tcdnetsoc-granted-by-privilege'
  DESC 'Privilege sufficient to grant access to a service'
  EQUALITY distinguishedNameMatch SYNTAX distinguishedName )
+
+# The canonical quota descriptor assumes everything is on one machine (or is at least accessible under one filesystem).
+# This, naturally, doesn't work for us since we have two /homes (one on cube and one on spoon).
+# So there's an extra entry, and then there are perl scripts on those machines which are supposed to enforce the quotas
 
 attributetype ( na:7
  NAME 'tcdnetsoc-diskquota'
@@ -58,6 +65,9 @@ attributetype ( na:8
  DESC 'Disk usage entry (host:fs:blocks_used:blocks_soft:blocks_hard:inodes_used:inodes_soft:inodes_hard)'
  EQUALITY caseIgnoreMatch SYNTAX directoryString )
 
+
+# MySQL passwords, in plaintext. This is crap. A possible alternative is to symmetrically encrypt the plaintext version with the user's password
+# So it can be decoded by the user to be put into config files. Then also have a hashed version (compatible with MySQL auth) for MySQL to use.
 attributetype ( na:9
  NAME 'tcdnetsoc-mysql-pw'
  DESC 'MySQL password for per-user database'
@@ -69,13 +79,40 @@ attributetype ( na:10
  DESC 'Configuration setting stored in LDAP'
  EQUALITY caseExactMatch SYNTAX directoryString )
 
-
+# I don't think we ever use this, and it's also horrible practice to store old passwords. They should just be deleted
 attributetype ( na:11
  NAME 'tcdnetsoc-saved-password'
  DESC 'Saved password of a disabled user'
  EQUALITY octetStringMatch
  SYNTAX 1.3.6.1.4.1.1466.115.121.1.40{128} )
 
+# Some users have (multiple) aliases to their userweb site. We're not allowing changing DocumentRoot here, as that should be always scrutinised
+attributetype ( na:12
+ NAME 'tcdnetsoc-website-alias'
+ DESC 'ServerName alias to be used as well as their user.netsoc.ie address for user website'
+ EQUALITY caseIgnoreMatch SYNTAX directoryString )
+
+# Committee membership can be recorded here
+attributetype ( na:13
+ NAME 'tcdnetsoc-committee-service'
+ DESC 'Comment for member who served on Committee for specified academic year'
+ EQUALITY caseIgnoreMatch SYNTAX directoryString )
+
+# Subject and year, useful to know
+attributetype ( na:14
+ NAME 'tcdnetsoc-member-course-name'
+ DESC 'Name of course member is taking'
+ EQUALITY caseIgnoreMatch SYNTAX directoryString )
+
+attributetype ( na:15
+ NAME 'tcdnetsoc-member-course-year'
+ DESC 'Year that member is in'
+ EQUALITY caseIgnoreMatch SYNTAX directoryString )
+
+attributetype ( na:16
+ NAME 'tcdnetsoc-temp-loginShell'
+ DESC 'Placeholder for actual loginShell when users are renewing their accounts'
+ EQUALITY caseIgnoreMatch SYNTAX directoryString )
 
 
 # A member or user of Netsoc
@@ -101,8 +138,8 @@ objectclass ( no:1
  MAY (
   uid $ gidNumber $ homeDirectory $ tcdnetsoc-ISS-username $ tcdnetsoc-membership-year $ 
   tcdnetsoc-admin-comment $ mail $ userPassword $ loginShell $ tcdnetsoc-diskquota $ tcdnetsoc-diskusage $ tcdnetsoc-mysql-pw $
-  tcdnetsoc-saved-password $
-  sambaSID $
+  tcdnetsoc-saved-password $ tcdnetsoc-website-alias $ tcdnetsoc-temp-loginShell $ 
+  tcdnetsoc-committee-service $ tcdnetsoc-member-course-name $ tcdnetsoc-member-course-year $ sambaSID $
   sambaLMPassword $ sambaNTPassword $ sambaPwdLastSet $
   sambaLogonTime $ sambaLogoffTime $ sambaKickoffTime $
   sambaPwdCanChange $ sambaPwdMustChange $ sambaAcctFlags $
@@ -110,7 +147,8 @@ objectclass ( no:1
   sambaProfilePath $ description $ sambaUserWorkstations $
   sambaPrimaryGroupSID $ sambaDomainName $ sambaMungedDial $
   sambaBadPasswordCount $ sambaBadPasswordTime $
-  sambaPasswordHistory $ sambaLogonHours) )
+  sambaPasswordHistory $ sambaLogonHours
+  ) )
 
 objectclass ( no:2
  NAME 'tcdnetsoc-group'
@@ -126,7 +164,6 @@ objectclass ( no:3
  SUP top
  STRUCTURAL
  MUST ( cn $ serialNumber ) )
-
 
 objectclass ( no:4
  NAME 'tcdnetsoc-privilege'
@@ -148,3 +185,4 @@ objectclass ( no:6
  STRUCTURAL
  MUST ( cn )
  MAY ( tcdnetsoc-value ) )
+
