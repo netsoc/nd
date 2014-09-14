@@ -195,6 +195,9 @@ class User(NDObject):
     def comment(self, msg):
         self.tcdnetsoc_admin_comment += '%s: %s' % (time.asctime(), msg)
 
+    def set_committee_comment(self, msg):
+        self.tcdnetsoc_committee_service += '%s' % (msg)
+
     def merge_into(self, other):
         assert self.get_state() == 'newmember'
         assert other.get_state() in [
@@ -391,7 +394,7 @@ class User(NDObject):
                   # user's access to commands
                 self.grant_priv("bouncer")
                 
-                self.tcdnetsoc-temp-loginShell = self.loginShell
+                self.tcdnetsoc_temp_loginShell = self.loginShell
                 self.loginShell = '/usr/bin/passwd'
 
         else: # Effectively default outcome
@@ -620,8 +623,11 @@ class User(NDObject):
         This should not need to be called directly.'''
 
         assert 'posixAccount' in self.objectClass
+
+        if 'shadowAccount' not in self.objectClass:
+            self.objectClass += 'shadowAccount'
         if self.get_attribute('shadowLastChange') is None:
-            daysSinceEpoch = Int(time.time() /60 /60 /24)
+            daysSinceEpoch = int(time.time() /60 /60 /24)
             self.shadowLastChange = daysSinceEpoch
         if self.get_attribute('shadowMin') is None:
             self.shadowMin = 0
@@ -631,9 +637,6 @@ class User(NDObject):
             self.shadowWarning = 7
         if self.get_attribute('shadowFlag') is None:
             self.shadowFlag = 0
-
-        if 'shadowAccount' not in self.objectClass:
-            self.objectClass += 'shadowAccount'
 
     def setup_samba_account(self):
         '''Set up a Samba account for this user (samba cannot use standard
@@ -960,3 +963,12 @@ Attribute('sambaPrimaryGroupSID', str)
 Attribute('sambaGroupType', int)
 Attribute('tcdnetsoc_mysql_pw', str)
 Attribute('tcdnetsoc_saved_password', str)
+Attribute('tcdnetsoc_website_alias', [str])
+Attribute('tcdnetsoc_committee_service', [str])
+Attribute('tcdnetsoc_member_course_name', str)
+Attribute('tcdnetsoc_member_course_year', str)
+Attribute('shadowLastChange', int)
+Attribute('shadowMin', int)
+Attribute('shadowMax', int)
+Attribute('shadowWarning', int)
+Attribute('shadowFlag', int)
