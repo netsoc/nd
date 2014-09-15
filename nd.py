@@ -9,7 +9,7 @@ import random
 import re
 import sendmail as sm
 import ldap
-from ldapobject import LDAPObject, SearchFilter, Attribute, match_like
+from ldapobject import LDAPObject, SearchFilter, Attribute, match_like, whoami
 from ldaplogging import lwarn
 try:
     import accountrequests
