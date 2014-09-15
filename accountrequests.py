@@ -172,8 +172,8 @@ def make_signup_url(user):
     if user.get_state() != "newmember":
         raise Exception(
             "%r is not a newly-created account, won't make signup URL" % user)
-    print "Generating single-use code for userid %d\
-        to change their account state" % user.uidNumber
+    print "Generating single-use code for userid %d"\
+        "to change their account state" % user.uidNumber
     k = create_key(setup_account, uidnumber=user.uidNumber)
     u = create_mac(str(user.uidNumber))
     return "https://signup.netsoc.tcd.ie/\
@@ -246,8 +246,8 @@ def setup_account(uidnumber, username, name, issusername, password):
     user = userlist[0]
     check(user.get_state() ==
           "newmember",
-          "User account already set up. \
-          To renew an account instead, contact support@netsoc.tcd.ie.")
+          "User account already set up. "
+          "To renew an account instead, contact support@netsoc.tcd.ie.")
     check(nd.User.username_is_valid(username), "Invalid username")
     check(len(name) > 2 and " " in name, "Please enter your full name")
     check(len(issusername) > 2, "Please enter your College username")
@@ -278,6 +278,7 @@ def run_server():
             s = c.recv(4096)
             code, args = parse_request(s)
             c.send("Success")
+            run_request(code, args)
             c.close()
         except Exception, e:
             print str(e), " from ", str(addr), ", msg:", repr((code, args))
