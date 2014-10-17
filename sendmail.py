@@ -36,5 +36,7 @@ def sendmail(msg, other_args=None, **kwargs):
             ["/usr/lib/sendmail",
              "-f",
              msg['From']],
+            "-t",
+            msg["To"],
             stdin=subprocess.PIPE)
         sendmail.communicate(msg.as_string())
