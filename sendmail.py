@@ -5,27 +5,27 @@ import subprocess
 default_from_address = "support@netsoc.tcd.ie"
 
 
-def sendmail(msg, dict=None, **kwargs):
+def sendmail(msg, other_args=None, **kwargs):
 
-    if dict is None:
-        dict = {}
-    dict.update(kwargs)
+    if other_args is None:
+        other_args = {}
+    other_args.update(kwargs)
     if 'From' not in msg:
-        if 'From' in dict:
-            msg['From'] = dict['From']
+        if 'From' in other_args:
+            msg['From'] = other_args['From']
         else:
             msg['From'] = default_from_address
-    if 'To' not in msg and 'To' in dict:
-        msg['To'] = dict['To']
-    if 'Subject' not in msg and 'Subject' in dict:
-        msg['Subject'] = dict['Subject']
+    if 'To' not in msg and 'To' in other_args:
+        msg['To'] = other_args['To']
+    if 'Subject' not in msg and 'Subject' in other_args:
+        msg['Subject'] = other_args['Subject']
 
     for h in ['From', 'To', 'Subject']:
         if h not in msg:
             raise Exception(
                 "Mail message sending failed, must contain %s header" % h)
 
-    if 'DRY_RUN' in dict:
+    if 'DRY_RUN' in other_args:
         print "Sending:"
         print msg
         print ""
@@ -34,7 +34,6 @@ def sendmail(msg, dict=None, **kwargs):
             (msg['From'], msg['To'])
         sendmail = subprocess.Popen(
             ["/usr/lib/sendmail",
-             kwargs["To"],
              msg['From']],
             stdin=subprocess.PIPE)
         sendmail.communicate(msg.as_string())
